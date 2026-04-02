@@ -42,27 +42,11 @@ tailwind.config = {
   }
 
   /* Breathing circle */
-  @keyframes breatheExpand {
-    0% { transform: scale(1); opacity: 0.6; }
-    100% { transform: scale(1.6); opacity: 1; }
-  }
-  @keyframes breatheHold {
-    0%, 100% { transform: scale(1.6); opacity: 1; }
-  }
-  @keyframes breatheContract {
-    0% { transform: scale(1.6); opacity: 1; }
-    100% { transform: scale(1); opacity: 0.6; }
-  }
   @keyframes pulse-soft {
     0%, 100% { opacity: 0.4; transform: scale(1); }
     50% { opacity: 0.7; transform: scale(1.05); }
   }
-
   .breath-idle { animation: pulse-soft 3s ease-in-out infinite; }
-  .breath-in { animation: breatheExpand linear forwards; }
-  .breath-hold { animation: breatheHold linear forwards; }
-  .breath-out { animation: breatheContract linear forwards; }
-  .breath-hold2 { animation: breatheHold linear forwards; }
 
   /* Nav tabs */
   .tab-btn { transition: all 0.25s ease; }
@@ -356,6 +340,7 @@ const state = {
   breathPhase: 0,
   breathCycles: 0,
   breathTimeout: null,
+  breathCountInterval: null,
 
   // Sounds
   audioCtx: null,
@@ -646,15 +631,16 @@ function startBreath() {
 function stopBreath() {
   state.breathRunning = false;
   clearTimeout(state.breathTimeout);
+  clearInterval(state.breathCountInterval);
   document.getElementById('breathStartBtn').classList.remove('hidden');
   document.getElementById('breathStopBtn').classList.add('hidden');
   document.getElementById('breathPhaseLabel').textContent = 'Ready';
   document.getElementById('breathPhaseCount').textContent = '–';
   document.getElementById('cycleCount').textContent = '0';
   const circle = document.getElementById('breathCircle');
-  circle.className = 'breath-idle rounded-full flex items-center justify-center';
-  circle.style.animation = '';
-  circle.style.animationDuration = '';
+  circle.style.transition = 'none';
+  circle.style.transform = '';
+  circle.style.opacity = '';
   void circle.offsetWidth;
   circle.className = 'breath-idle rounded-full flex items-center justify-center';
 }
@@ -668,34 +654,43 @@ function runBreathPhase() {
 
   document.getElementById('breathPhaseLabel').textContent = phaseName;
 
-  // Animate circle
   const circle = document.getElementById('breathCircle');
-  circle.style.animation = 'none';
-  void circle.offsetWidth; // reflow
+  // Strip the idle pulse class — inline styles take over from here
+  circle.className = 'rounded-full flex items-center justify-center';
 
-  let animClass = 'breath-idle';
-  if (phaseName === 'Inhale') animClass = 'breath-in';
-  else if (phaseName === 'Exhale') animClass = 'breath-out';
-  else animClass = 'breath-hold';
-
-  circle.className = `${animClass} rounded-full flex items-center justify-center`;
-  circle.style.animationDuration = duration + 's';
-  circle.style.animationFillMode = 'forwards';
-  circle.style.animationTimingFunction = phaseName === 'Inhale' ? 'ease-in' : phaseName === 'Exhale' ? 'ease-out' : 'linear';
+  if (phaseName === 'Inhale') {
+    // Snap to collapsed state first (handles first cycle coming from idle),
+    // then let transition carry it to full size over the phase duration.
+    circle.style.transition = 'none';
+    circle.style.transform = 'scale(1)';
+    circle.style.opacity = '0.6';
+    void circle.offsetWidth; // force reflow so next assignment triggers a transition
+    circle.style.transition = `transform ${duration}s ease-in-out, opacity ${duration}s ease-in`;
+    circle.style.transform = 'scale(1.6)';
+    circle.style.opacity = '1';
+  } else if (phaseName === 'Exhale') {
+    // Already at scale(1.6) from the preceding hold — smoothly contract.
+    circle.style.transition = `transform ${duration}s ease-in-out, opacity ${duration}s ease-out`;
+    circle.style.transform = 'scale(1)';
+    circle.style.opacity = '0.6';
+  } else {
+    // Hold — disable transition so the circle freezes exactly where it is.
+    circle.style.transition = 'none';
+  }
 
   // Countdown
   let count = duration;
   document.getElementById('breathPhaseCount').textContent = count;
-  const countInterval = setInterval(() => {
+  clearInterval(state.breathCountInterval);
+  state.breathCountInterval = setInterval(() => {
     count--;
     if (count >= 0) document.getElementById('breathPhaseCount').textContent = count;
   }, 1000);
 
   state.breathTimeout = setTimeout(() => {
-    clearInterval(countInterval);
+    clearInterval(state.breathCountInterval);
     if (!state.breathRunning) return;
     state.breathPhase++;
-    // Track cycles
     if (state.breathPhase % p.phases.length === 0) {
       state.breathCycles++;
       document.getElementById('cycleCount').textContent = state.breathCycles;
