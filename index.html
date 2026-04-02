@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Still — Meditate</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        bg: '#1a1a2e',
+        surface: '#16213e',
+        card: '#0f3460',
+        slate: '#2d3561',
+        sage: '#4a7c59',
+        'sage-light': '#6aab7e',
+        amber: '#c8963e',
+        'amber-light': '#e8b86d',
+        muted: '#8892a4',
+        soft: '#d4dde8',
+      },
+      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+    }
+  }
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { background: #1a1a2e; color: #d4dde8; font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
+
+  /* Progress ring */
+  .progress-ring { transform: rotate(-90deg); }
+  .progress-ring-circle {
+    stroke-dasharray: 502;
+    stroke-dashoffset: 502;
+    transition: stroke-dashoffset 1s linear;
+    stroke-linecap: round;
+  }
+
+  /* Breathing circle */
+  @keyframes breatheExpand {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.6); opacity: 1; }
+  }
+  @keyframes breatheHold {
+    0%, 100% { transform: scale(1.6); opacity: 1; }
+  }
+  @keyframes breatheContract {
+    0% { transform: scale(1.6); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.6; }
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+  }
+
+  .breath-idle { animation: pulse-soft 3s ease-in-out infinite; }
+  .breath-in { animation: breatheExpand linear forwards; }
+  .breath-hold { animation: breatheHold linear forwards; }
+  .breath-out { animation: breatheContract linear forwards; }
+  .breath-hold2 { animation: breatheHold linear forwards; }
+
+  /* Nav tabs */
+  .tab-btn { transition: all 0.25s ease; }
+  .tab-btn.active { background: rgba(200,150,62,0.15); color: #e8b86d; border-color: rgba(200,150,62,0.4); }
+  .tab-btn:not(.active):hover { background: rgba(255,255,255,0.05); }
+
+  /* Sound toggle */
+  .sound-btn { transition: all 0.25s ease; }
+  .sound-btn.active { background: rgba(74,124,89,0.25); border-color: rgba(106,171,126,0.6); color: #6aab7e; }
+  .sound-btn:not(.active):hover { background: rgba(255,255,255,0.05); }
+
+  /* Mood button */
+  .mood-btn { transition: all 0.2s ease; }
+  .mood-btn:hover { transform: scale(1.2); }
+  .mood-btn.selected { transform: scale(1.25); filter: drop-shadow(0 0 8px rgba(200,150,62,0.6)); }
+
+  /* Duration button */
+  .dur-btn { transition: all 0.2s ease; }
+  .dur-btn.active { background: rgba(200,150,62,0.2); border-color: rgba(200,150,62,0.5); color: #e8b86d; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  /* Fade in */
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn 0.35s ease forwards; }
+
+  /* Glow */
+  .glow-amber { box-shadow: 0 0 30px rgba(200,150,62,0.15); }
+  .glow-sage { box-shadow: 0 0 30px rgba(74,124,89,0.2); }
+
+  /* Streak badge */
+  .streak-badge { background: linear-gradient(135deg, rgba(200,150,62,0.2), rgba(200,150,62,0.05)); border: 1px solid rgba(200,150,62,0.3); }
+
+  /* Custom input */
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+  input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; }
+  input[type=range]::-webkit-slider-runnable-track { background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #e8b86d; border-radius: 50%; margin-top: -5px; cursor: pointer; }
+</style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+<!-- Header -->
+<header class="flex items-center justify-between px-6 py-5 border-b border-white/5">
+  <div>
+    <h1 class="text-xl font-light tracking-widest text-soft">still</h1>
+  </div>
+  <div class="flex items-center gap-2">
+    <div id="streakBadge" class="streak-badge hidden px-3 py-1 rounded-full text-xs text-amber-light flex items-center gap-1.5">
+      <span>🔥</span><span id="streakCount">0</span><span class="text-muted">day streak</span>
+    </div>
+  </div>
+</header>
+
+<!-- Nav -->
+<nav class="flex gap-1 px-4 pt-4 pb-0 max-w-2xl mx-auto w-full">
+  <button onclick="showTab('timer')" class="tab-btn active flex-1 py-2 text-sm border border-white/10 rounded-lg text-muted" data-tab="timer">Timer</button>
+  <button onclick="showTab('breathe')" class="tab-btn flex-1 py-2 text-sm border border-white/10 rounded-lg text-muted" data-tab="breathe">Breathe</button>
+  <button onclick="showTab('sounds')" class="tab-btn flex-1 py-2 text-sm border border-white/10 rounded-lg text-muted" data-tab="sounds">Sounds</button>
+  <button onclick="showTab('log')" class="tab-btn flex-1 py-2 text-sm border border-white/10 rounded-lg text-muted" data-tab="log">Log</button>
+</nav>
+
+<!-- Main -->
+<main class="flex-1 max-w-2xl mx-auto w-full px-4 py-6">
+
+  <!-- TIMER TAB -->
+  <div id="tab-timer" class="fade-in">
+
+    <!-- Mood check-in pre -->
+    <div id="moodPre" class="mb-6 bg-surface/60 border border-white/5 rounded-2xl p-5">
+      <p class="text-sm text-muted mb-3 text-center">How are you feeling right now?</p>
+      <div class="flex justify-center gap-4" id="moodPreBtns">
+        <button class="mood-btn text-2xl" data-mood="1" onclick="selectMood('pre', 1)">😰</button>
+        <button class="mood-btn text-2xl" data-mood="2" onclick="selectMood('pre', 2)">😐</button>
+        <button class="mood-btn text-2xl" data-mood="3" onclick="selectMood('pre', 3)">🙂</button>
+        <button class="mood-btn text-2xl" data-mood="4" onclick="selectMood('pre', 4)">😌</button>
+        <button class="mood-btn text-2xl" data-mood="5" onclick="selectMood('pre', 5)">🧘</button>
+      </div>
+    </div>
+
+    <!-- Duration picker -->
+    <div id="durationPicker" class="mb-6">
+      <p class="text-xs text-muted uppercase tracking-widest mb-3 text-center">Session Length</p>
+      <div class="flex gap-2 justify-center flex-wrap">
+        <button class="dur-btn px-4 py-2 rounded-lg border border-white/10 text-sm text-muted" onclick="setDuration(5)" data-min="5">5 min</button>
+        <button class="dur-btn px-4 py-2 rounded-lg border border-white/10 text-sm text-muted" onclick="setDuration(10)" data-min="10">10 min</button>
+        <button class="dur-btn px-4 py-2 rounded-lg border border-white/10 text-sm text-muted" onclick="setDuration(20)" data-min="20">20 min</button>
+        <div class="flex items-center gap-2">
+          <input id="customMin" type="number" min="1" max="120" placeholder="–"
+            class="w-16 text-center py-2 rounded-lg border border-white/10 bg-transparent text-sm text-soft focus:outline-none focus:border-amber/50"
+            oninput="setDuration(parseInt(this.value)||0)">
+          <span class="text-xs text-muted">min</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timer ring -->
+    <div class="flex flex-col items-center mb-8">
+      <div class="relative w-64 h-64">
+        <svg class="progress-ring w-full h-full" viewBox="0 0 170 170">
+          <circle cx="85" cy="85" r="80" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="6"/>
+          <circle id="progressCircle" class="progress-ring-circle" cx="85" cy="85" r="80"
+            fill="none" stroke="#c8963e" stroke-width="6"/>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <div id="timerDisplay" class="text-5xl font-light text-soft tracking-tight">00:00</div>
+          <div id="timerLabel" class="text-xs text-muted mt-1 tracking-widest uppercase">ready</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="flex justify-center gap-4 mb-6">
+      <button id="btnStop" onclick="stopSession()"
+        class="hidden px-5 py-3 rounded-xl border border-white/10 text-sm text-muted hover:bg-white/5 transition-all">
+        Stop
+      </button>
+      <button id="btnStart" onclick="startSession()"
+        class="px-8 py-3 rounded-xl bg-amber/20 border border-amber/40 text-amber-light text-sm font-medium hover:bg-amber/30 transition-all glow-amber">
+        Begin
+      </button>
+      <button id="btnPause" onclick="pauseSession()"
+        class="hidden px-5 py-3 rounded-xl border border-white/10 text-sm text-muted hover:bg-white/5 transition-all">
+        Pause
+      </button>
+    </div>
+
+    <!-- Session type -->
+    <div class="flex justify-center gap-3 text-xs text-muted">
+      <button onclick="setType('meditation')" class="type-btn px-3 py-1 rounded-full border border-white/10 hover:border-white/20 transition-all" data-type="meditation">Meditation</button>
+      <button onclick="setType('breathing')" class="type-btn px-3 py-1 rounded-full border border-white/10 hover:border-white/20 transition-all" data-type="breathing">Breathing</button>
+      <button onclick="setType('body-scan')" class="type-btn px-3 py-1 rounded-full border border-white/10 hover:border-white/20 transition-all" data-type="body-scan">Body Scan</button>
+    </div>
+  </div>
+
+  <!-- BREATHE TAB -->
+  <div id="tab-breathe" class="hidden fade-in">
+    <div class="flex gap-2 justify-center mb-8">
+      <button onclick="setBreathPattern('box')" class="dur-btn active px-4 py-2 rounded-lg border border-white/10 text-sm text-muted" id="patternBox">Box 4-4-4-4</button>
+      <button onclick="setBreathPattern('478')" class="dur-btn px-4 py-2 rounded-lg border border-white/10 text-sm text-muted" id="pattern478">4-7-8</button>
+    </div>
+
+    <!-- Breath circle -->
+    <div class="flex flex-col items-center mb-8">
+      <div class="relative flex items-center justify-center" style="width:280px;height:280px;">
+        <!-- Outer glow ring -->
+        <div id="breathGlow" class="absolute rounded-full transition-all duration-1000"
+          style="width:220px;height:220px;background:radial-gradient(circle, rgba(74,124,89,0.12) 0%, transparent 70%);"></div>
+        <!-- Main circle -->
+        <div id="breathCircle" class="breath-idle rounded-full flex items-center justify-center"
+          style="width:140px;height:140px;background:radial-gradient(circle, rgba(74,124,89,0.4) 0%, rgba(74,124,89,0.1) 100%);border:1px solid rgba(106,171,126,0.3);">
+        </div>
+        <!-- Phase label -->
+        <div class="absolute flex flex-col items-center">
+          <span id="breathPhaseLabel" class="text-base font-light text-soft tracking-widest">Ready</span>
+          <span id="breathPhaseCount" class="text-3xl font-light text-sage-light mt-1">–</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pattern info -->
+    <div id="patternInfo" class="bg-surface/60 border border-white/5 rounded-2xl p-4 mb-6 text-center">
+      <p class="text-sm text-muted" id="patternDesc">Inhale 4s · Hold 4s · Exhale 4s · Hold 4s</p>
+    </div>
+
+    <div class="flex justify-center gap-4">
+      <button id="breathStopBtn" onclick="stopBreath()" class="hidden px-5 py-3 rounded-xl border border-white/10 text-sm text-muted hover:bg-white/5 transition-all">Stop</button>
+      <button id="breathStartBtn" onclick="startBreath()"
+        class="px-8 py-3 rounded-xl bg-sage/20 border border-sage-light/40 text-sage-light text-sm font-medium hover:bg-sage/30 transition-all glow-sage">
+        Begin
+      </button>
+    </div>
+
+    <!-- Cycle count -->
+    <div class="text-center mt-6 text-sm text-muted">
+      Cycles: <span id="cycleCount" class="text-soft">0</span>
+    </div>
+  </div>
+
+  <!-- SOUNDS TAB -->
+  <div id="tab-sounds" class="hidden fade-in">
+    <p class="text-center text-sm text-muted mb-6">Ambient sounds to support your practice</p>
+
+    <div class="grid grid-cols-2 gap-3 mb-8">
+      <button class="sound-btn border border-white/10 rounded-2xl p-5 text-left" onclick="toggleSound('rain')" id="btn-rain">
+        <div class="text-2xl mb-2">🌧️</div>
+        <div class="text-sm font-medium text-soft">Rain</div>
+        <div class="text-xs text-muted mt-0.5">Gentle rainfall</div>
+      </button>
+      <button class="sound-btn border border-white/10 rounded-2xl p-5 text-left" onclick="toggleSound('forest')" id="btn-forest">
+        <div class="text-2xl mb-2">🌿</div>
+        <div class="text-sm font-medium text-soft">Forest</div>
+        <div class="text-xs text-muted mt-0.5">Wind through trees</div>
+      </button>
+      <button class="sound-btn border border-white/10 rounded-2xl p-5 text-left" onclick="toggleSound('bowl')" id="btn-bowl">
+        <div class="text-2xl mb-2">🔔</div>
+        <div class="text-sm font-medium text-soft">Tibetan Bowl</div>
+        <div class="text-xs text-muted mt-0.5">Resonant tones</div>
+      </button>
+      <button class="sound-btn border border-white/10 rounded-2xl p-5 text-left" onclick="toggleSound('white')" id="btn-white">
+        <div class="text-2xl mb-2">〰️</div>
+        <div class="text-sm font-medium text-soft">White Noise</div>
+        <div class="text-xs text-muted mt-0.5">Steady ambient hum</div>
+      </button>
+    </div>
+
+    <!-- Volume -->
+    <div class="bg-surface/60 border border-white/5 rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm text-muted">Volume</span>
+        <span id="volLabel" class="text-sm text-soft">70%</span>
+      </div>
+      <input type="range" min="0" max="100" value="70" class="w-full" id="volumeSlider" oninput="setVolume(this.value)">
+    </div>
+  </div>
+
+  <!-- LOG TAB -->
+  <div id="tab-log" class="hidden fade-in">
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-3 mb-6">
+      <div class="bg-surface/60 border border-white/5 rounded-2xl p-4 text-center">
+        <div class="text-2xl font-light text-amber-light" id="statTotal">0</div>
+        <div class="text-xs text-muted mt-1">Sessions</div>
+      </div>
+      <div class="bg-surface/60 border border-white/5 rounded-2xl p-4 text-center">
+        <div class="text-2xl font-light text-amber-light" id="statMinutes">0</div>
+        <div class="text-xs text-muted mt-1">Minutes</div>
+      </div>
+      <div class="bg-surface/60 border border-white/5 rounded-2xl p-4 text-center">
+        <div class="text-2xl font-light text-amber-light" id="statStreak">0</div>
+        <div class="text-xs text-muted mt-1">Day Streak</div>
+      </div>
+    </div>
+
+    <!-- Session list -->
+    <div id="sessionList" class="space-y-2 max-h-96 overflow-y-auto pr-1">
+      <div class="text-center text-muted text-sm py-12" id="emptyLog">No sessions yet. Begin your first meditation.</div>
+    </div>
+
+    <!-- Clear -->
+    <div class="flex justify-center mt-6">
+      <button onclick="clearLog()" class="text-xs text-muted/50 hover:text-muted transition-colors px-4 py-2">Clear history</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- Completion Modal -->
+<div id="completionModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4" style="background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);">
+  <div class="bg-surface border border-white/10 rounded-3xl p-8 max-w-sm w-full text-center fade-in">
+    <div class="text-4xl mb-4">✨</div>
+    <h2 class="text-xl font-light text-soft mb-1">Session Complete</h2>
+    <p id="completionDuration" class="text-sm text-muted mb-6"></p>
+    <p class="text-sm text-muted mb-4">How do you feel now?</p>
+    <div class="flex justify-center gap-4 mb-6" id="moodPostBtns">
+      <button class="mood-btn text-2xl" onclick="selectMood('post', 1)">😰</button>
+      <button class="mood-btn text-2xl" onclick="selectMood('post', 2)">😐</button>
+      <button class="mood-btn text-2xl" onclick="selectMood('post', 3)">🙂</button>
+      <button class="mood-btn text-2xl" onclick="selectMood('post', 4)">😌</button>
+      <button class="mood-btn text-2xl" onclick="selectMood('post', 5)">🧘</button>
+    </div>
+    <button onclick="saveAndClose()"
+      class="w-full py-3 rounded-xl bg-amber/20 border border-amber/40 text-amber-light text-sm font-medium hover:bg-amber/30 transition-all">
+      Save Session
+    </button>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+const state = {
+  // Timer
+  duration: 10 * 60,       // seconds
+  remaining: 10 * 60,
+  timerRunning: false,
+  timerInterval: null,
+  sessionType: 'meditation',
+  preMood: null,
+  postMood: null,
+  sessionStartTime: null,
+  completedDuration: 0,
+
+  // Breath
+  breathPattern: 'box',
+  breathRunning: false,
+  breathPhase: 0,
+  breathCycles: 0,
+  breathTimeout: null,
+
+  // Sounds
+  audioCtx: null,
+  activeSounds: {},
+  volume: 0.7,
+};
+
+const PATTERNS = {
+  box: { phases: ['Inhale','Hold','Exhale','Hold'], times: [4,4,4,4], desc: 'Inhale 4s · Hold 4s · Exhale 4s · Hold 4s' },
+  '478': { phases: ['Inhale','Hold','Exhale'], times: [4,7,8], desc: 'Inhale 4s · Hold 7s · Exhale 8s' },
+};
+
+const MOODS = ['','😰','😐','🙂','😌','🧘'];
+
+// ─────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('[id^="tab-"]').forEach(el => { el.classList.add('hidden'); el.classList.remove('fade-in'); });
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const tab = document.getElementById('tab-' + name);
+  tab.classList.remove('hidden');
+  requestAnimationFrame(() => tab.classList.add('fade-in'));
+  document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  if (name === 'log') renderLog();
+}
+
+// ─────────────────────────────────────────────
+// DURATION
+// ─────────────────────────────────────────────
+function setDuration(mins) {
+  if (!mins || mins < 1) return;
+  state.duration = mins * 60;
+  state.remaining = state.duration;
+  updateTimerDisplay();
+  document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`[data-min="${mins}"]`);
+  if (btn) btn.classList.add('active');
+  if (!document.querySelector('[data-min]')) return;
+  if (![5,10,20].includes(mins)) {
+    document.querySelectorAll('[data-min]').forEach(b => b.classList.remove('active'));
+  }
+}
+
+setDuration(10);
+document.querySelector('[data-min="10"]').classList.add('active');
+
+function setType(type) {
+  state.sessionType = type;
+  document.querySelectorAll('.type-btn').forEach(b => {
+    b.style.borderColor = b.dataset.type === type ? 'rgba(200,150,62,0.4)' : '';
+    b.style.color = b.dataset.type === type ? '#e8b86d' : '';
+  });
+}
+setType('meditation');
+
+// ─────────────────────────────────────────────
+// TIMER
+// ─────────────────────────────────────────────
+function updateTimerDisplay() {
+  const m = Math.floor(state.remaining / 60);
+  const s = state.remaining % 60;
+  document.getElementById('timerDisplay').textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const pct = 1 - (state.remaining / state.duration);
+  const circumference = 502;
+  document.getElementById('progressCircle').style.strokeDashoffset = circumference - (pct * circumference);
+}
+
+function startSession() {
+  if (state.timerRunning) return;
+  state.timerRunning = true;
+  state.sessionStartTime = Date.now();
+  document.getElementById('timerLabel').textContent = state.sessionType;
+  document.getElementById('btnStart').classList.add('hidden');
+  document.getElementById('btnPause').classList.remove('hidden');
+  document.getElementById('btnStop').classList.remove('hidden');
+  document.getElementById('durationPicker').style.opacity = '0.4';
+  document.getElementById('durationPicker').style.pointerEvents = 'none';
+  document.getElementById('moodPre').style.opacity = '0.4';
+  document.getElementById('moodPre').style.pointerEvents = 'none';
+
+  state.timerInterval = setInterval(() => {
+    if (state.remaining <= 0) {
+      completeSession();
+      return;
+    }
+    state.remaining--;
+    updateTimerDisplay();
+  }, 1000);
+}
+
+function pauseSession() {
+  if (!state.timerRunning) {
+    state.timerRunning = true;
+    state.timerInterval = setInterval(() => {
+      if (state.remaining <= 0) { completeSession(); return; }
+      state.remaining--;
+      updateTimerDisplay();
+    }, 1000);
+    document.getElementById('btnPause').textContent = 'Pause';
+    document.getElementById('timerLabel').textContent = state.sessionType;
+  } else {
+    state.timerRunning = false;
+    clearInterval(state.timerInterval);
+    document.getElementById('btnPause').textContent = 'Resume';
+    document.getElementById('timerLabel').textContent = 'paused';
+  }
+}
+
+function stopSession() {
+  clearInterval(state.timerInterval);
+  state.timerRunning = false;
+  state.remaining = state.duration;
+  updateTimerDisplay();
+  document.getElementById('timerLabel').textContent = 'ready';
+  document.getElementById('btnStart').classList.remove('hidden');
+  document.getElementById('btnPause').classList.add('hidden');
+  document.getElementById('btnStop').classList.add('hidden');
+  document.getElementById('btnPause').textContent = 'Pause';
+  document.getElementById('durationPicker').style.opacity = '';
+  document.getElementById('durationPicker').style.pointerEvents = '';
+  document.getElementById('moodPre').style.opacity = '';
+  document.getElementById('moodPre').style.pointerEvents = '';
+}
+
+function completeSession() {
+  clearInterval(state.timerInterval);
+  state.timerRunning = false;
+  state.completedDuration = state.duration;
+  document.getElementById('completionDuration').textContent =
+    `${Math.round(state.duration/60)} minutes of ${state.sessionType}`;
+  document.getElementById('completionModal').classList.remove('hidden');
+  // Reset post mood selection
+  document.querySelectorAll('#moodPostBtns .mood-btn').forEach(b => b.classList.remove('selected'));
+  state.postMood = null;
+}
+
+// ─────────────────────────────────────────────
+// MOOD
+// ─────────────────────────────────────────────
+function selectMood(phase, val) {
+  if (phase === 'pre') {
+    state.preMood = val;
+    document.querySelectorAll('#moodPreBtns .mood-btn').forEach(b => {
+      b.classList.toggle('selected', parseInt(b.dataset.mood) === val);
+    });
+  } else {
+    state.postMood = val;
+    document.querySelectorAll('#moodPostBtns .mood-btn').forEach(b => {
+      b.classList.toggle('selected', parseInt(b.dataset.mood) === val);
+    });
+  }
+}
+
+function saveAndClose() {
+  saveSession({
+    date: new Date().toISOString(),
+    duration: state.completedDuration,
+    type: state.sessionType,
+    preMood: state.preMood,
+    postMood: state.postMood,
+  });
+  document.getElementById('completionModal').classList.add('hidden');
+  stopSession();
+  state.preMood = null;
+  document.querySelectorAll('#moodPreBtns .mood-btn').forEach(b => b.classList.remove('selected'));
+  updateStreakBadge();
+}
+
+// ─────────────────────────────────────────────
+// SESSION LOG
+// ─────────────────────────────────────────────
+function getSessions() {
+  try { return JSON.parse(localStorage.getItem('still_sessions') || '[]'); } catch { return []; }
+}
+
+function saveSession(session) {
+  const sessions = getSessions();
+  sessions.unshift(session);
+  localStorage.setItem('still_sessions', JSON.stringify(sessions));
+}
+
+function calcStreak() {
+  const sessions = getSessions();
+  if (!sessions.length) return 0;
+  const days = [...new Set(sessions.map(s => s.date.split('T')[0]))].sort().reverse();
+  const today = new Date().toISOString().split('T')[0];
+  if (days[0] !== today) {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    if (days[0] !== yesterday) return 0;
+  }
+  let streak = 1;
+  for (let i = 1; i < days.length; i++) {
+    const prev = new Date(days[i-1]);
+    const curr = new Date(days[i]);
+    const diff = (prev - curr) / 86400000;
+    if (Math.round(diff) === 1) streak++;
+    else break;
+  }
+  return streak;
+}
+
+function updateStreakBadge() {
+  const streak = calcStreak();
+  const badge = document.getElementById('streakBadge');
+  if (streak > 0) {
+    badge.classList.remove('hidden');
+    document.getElementById('streakCount').textContent = streak;
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function renderLog() {
+  const sessions = getSessions();
+  const streak = calcStreak();
+  const totalMin = Math.round(sessions.reduce((a, s) => a + (s.duration || 0), 0) / 60);
+
+  document.getElementById('statTotal').textContent = sessions.length;
+  document.getElementById('statMinutes').textContent = totalMin;
+  document.getElementById('statStreak').textContent = streak;
+
+  const list = document.getElementById('sessionList');
+  const empty = document.getElementById('emptyLog');
+
+  if (!sessions.length) {
+    empty.style.display = '';
+    list.querySelectorAll('.session-item').forEach(el => el.remove());
+    return;
+  }
+  empty.style.display = 'none';
+  list.querySelectorAll('.session-item').forEach(el => el.remove());
+
+  sessions.forEach(s => {
+    const d = new Date(s.date);
+    const dateStr = d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    const timeStr = d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+    const mins = Math.round((s.duration||0)/60);
+    const item = document.createElement('div');
+    item.className = 'session-item bg-surface/60 border border-white/5 rounded-xl p-4 flex items-center justify-between';
+    item.innerHTML = `
+      <div class="flex items-center gap-3">
+        <div class="text-xl">${MOODS[s.preMood||0]||'○'}</div>
+        <div>
+          <div class="text-sm text-soft font-medium">${s.type||'meditation'} · ${mins} min</div>
+          <div class="text-xs text-muted">${dateStr} · ${timeStr}</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xl">
+        ${s.preMood ? MOODS[s.preMood] : ''}
+        ${s.preMood && s.postMood ? '<span class="text-xs text-muted">→</span>' : ''}
+        ${s.postMood ? MOODS[s.postMood] : ''}
+      </div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function clearLog() {
+  if (confirm('Clear all session history?')) {
+    localStorage.removeItem('still_sessions');
+    renderLog();
+    updateStreakBadge();
+  }
+}
+
+// ─────────────────────────────────────────────
+// BREATHING
+// ─────────────────────────────────────────────
+function setBreathPattern(name) {
+  state.breathPattern = name;
+  stopBreath();
+  const p = PATTERNS[name];
+  document.getElementById('patternDesc').textContent = p.desc;
+  document.getElementById('patternBox').classList.toggle('active', name === 'box');
+  document.getElementById('pattern478').classList.toggle('active', name === '478');
+}
+
+function startBreath() {
+  state.breathRunning = true;
+  state.breathCycles = 0;
+  state.breathPhase = 0;
+  document.getElementById('breathStartBtn').classList.add('hidden');
+  document.getElementById('breathStopBtn').classList.remove('hidden');
+  runBreathPhase();
+}
+
+function stopBreath() {
+  state.breathRunning = false;
+  clearTimeout(state.breathTimeout);
+  document.getElementById('breathStartBtn').classList.remove('hidden');
+  document.getElementById('breathStopBtn').classList.add('hidden');
+  document.getElementById('breathPhaseLabel').textContent = 'Ready';
+  document.getElementById('breathPhaseCount').textContent = '–';
+  document.getElementById('cycleCount').textContent = '0';
+  const circle = document.getElementById('breathCircle');
+  circle.className = 'breath-idle rounded-full flex items-center justify-center';
+  circle.style.animation = '';
+  circle.style.animationDuration = '';
+  void circle.offsetWidth;
+  circle.className = 'breath-idle rounded-full flex items-center justify-center';
+}
+
+function runBreathPhase() {
+  if (!state.breathRunning) return;
+  const p = PATTERNS[state.breathPattern];
+  const phaseIdx = state.breathPhase % p.phases.length;
+  const phaseName = p.phases[phaseIdx];
+  const duration = p.times[phaseIdx];
+
+  document.getElementById('breathPhaseLabel').textContent = phaseName;
+
+  // Animate circle
+  const circle = document.getElementById('breathCircle');
+  circle.style.animation = 'none';
+  void circle.offsetWidth; // reflow
+
+  let animClass = 'breath-idle';
+  if (phaseName === 'Inhale') animClass = 'breath-in';
+  else if (phaseName === 'Exhale') animClass = 'breath-out';
+  else animClass = 'breath-hold';
+
+  circle.className = `${animClass} rounded-full flex items-center justify-center`;
+  circle.style.animationDuration = duration + 's';
+  circle.style.animationFillMode = 'forwards';
+  circle.style.animationTimingFunction = phaseName === 'Inhale' ? 'ease-in' : phaseName === 'Exhale' ? 'ease-out' : 'linear';
+
+  // Countdown
+  let count = duration;
+  document.getElementById('breathPhaseCount').textContent = count;
+  const countInterval = setInterval(() => {
+    count--;
+    if (count >= 0) document.getElementById('breathPhaseCount').textContent = count;
+  }, 1000);
+
+  state.breathTimeout = setTimeout(() => {
+    clearInterval(countInterval);
+    if (!state.breathRunning) return;
+    state.breathPhase++;
+    // Track cycles
+    if (state.breathPhase % p.phases.length === 0) {
+      state.breathCycles++;
+      document.getElementById('cycleCount').textContent = state.breathCycles;
+    }
+    runBreathPhase();
+  }, duration * 1000);
+}
+
+// ─────────────────────────────────────────────
+// WEB AUDIO — PROCEDURAL SOUNDS
+// ─────────────────────────────────────────────
+function getAudioCtx() {
+  if (!state.audioCtx) state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return state.audioCtx;
+}
+
+function createMasterGain() {
+  const ctx = getAudioCtx();
+  const g = ctx.createGain();
+  g.gain.value = state.volume;
+  g.connect(ctx.destination);
+  return g;
+}
+
+// White noise buffer
+function createNoiseBuffer(ctx, seconds) {
+  const sr = ctx.sampleRate;
+  const buf = ctx.createBuffer(1, sr * seconds, sr);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  return buf;
+}
+
+function playWhiteNoise(master) {
+  const ctx = getAudioCtx();
+  const buf = createNoiseBuffer(ctx, 2);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 800;
+
+  const g = ctx.createGain();
+  g.gain.value = 0.15;
+
+  src.connect(filter);
+  filter.connect(g);
+  g.connect(master);
+  src.start();
+  return { src, nodes: [src, filter, g] };
+}
+
+function playRain(master) {
+  const ctx = getAudioCtx();
+  const nodes = [];
+
+  // Base rain — filtered white noise
+  const buf = createNoiseBuffer(ctx, 3);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+
+  const highpass = ctx.createBiquadFilter();
+  highpass.type = 'highpass';
+  highpass.frequency.value = 400;
+
+  const lowpass = ctx.createBiquadFilter();
+  lowpass.type = 'lowpass';
+  lowpass.frequency.value = 4000;
+
+  const rainGain = ctx.createGain();
+  rainGain.gain.value = 0.25;
+
+  src.connect(highpass);
+  highpass.connect(lowpass);
+  lowpass.connect(rainGain);
+  rainGain.connect(master);
+  src.start();
+  nodes.push(src, highpass, lowpass, rainGain);
+
+  // Occasional drips — random pings using oscillator bursts
+  const drip = () => {
+    if (!state.activeSounds['rain']) return;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.frequency.value = 800 + Math.random() * 1200;
+    osc.type = 'sine';
+    g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.connect(g);
+    g.connect(master);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+    setTimeout(drip, 200 + Math.random() * 800);
+  };
+  setTimeout(drip, 500);
+
+  return { src, nodes };
+}
+
+function playForest(master) {
+  const ctx = getAudioCtx();
+  const nodes = [];
+
+  // Wind: slow LFO modulated noise
+  const buf = createNoiseBuffer(ctx, 4);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+
+  const bandpass = ctx.createBiquadFilter();
+  bandpass.type = 'bandpass';
+  bandpass.frequency.value = 600;
+  bandpass.Q.value = 0.5;
+
+  const windGain = ctx.createGain();
+  windGain.gain.value = 0;
+
+  // LFO for wind swell
+  const lfo = ctx.createOscillator();
+  const lfoGain = ctx.createGain();
+  lfo.frequency.value = 0.08;
+  lfoGain.gain.value = 0.12;
+  lfo.connect(lfoGain);
+  lfoGain.connect(windGain.gain);
+  windGain.gain.value = 0.12;
+
+  src.connect(bandpass);
+  bandpass.connect(windGain);
+  windGain.connect(master);
+  src.start();
+  lfo.start();
+  nodes.push(src, bandpass, windGain, lfo, lfoGain);
+
+  // Birds — occasional high sine chirps
+  const chirp = () => {
+    if (!state.activeSounds['forest']) return;
+    const count = 2 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        const baseF = 2000 + Math.random() * 2000;
+        osc.frequency.setValueAtTime(baseF, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(baseF * 1.3, ctx.currentTime + 0.08);
+        osc.type = 'sine';
+        g.gain.setValueAtTime(0, ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0.03, ctx.currentTime + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        osc.connect(g);
+        g.connect(master);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.2);
+      }, i * 120);
+    }
+    setTimeout(chirp, 3000 + Math.random() * 6000);
+  };
+  setTimeout(chirp, 1000);
+
+  return { src, nodes };
+}
+
+function playBowl(master) {
+  const ctx = getAudioCtx();
+
+  const playStrike = () => {
+    if (!state.activeSounds['bowl']) return;
+    const fundamental = 180 + Math.random() * 40;
+    const harmonics = [1, 2.76, 5.40, 8.93];
+    const gains = [0.5, 0.25, 0.12, 0.06];
+
+    harmonics.forEach((h, i) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.frequency.value = fundamental * h;
+      osc.type = 'sine';
+      const decayTime = 4 - i * 0.5;
+      g.gain.setValueAtTime(0, ctx.currentTime);
+      g.gain.linearRampToValueAtTime(gains[i] * 0.4, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + decayTime);
+      osc.connect(g);
+      g.connect(master);
+      osc.start();
+      osc.stop(ctx.currentTime + decayTime + 0.1);
+    });
+
+    setTimeout(playStrike, 6000 + Math.random() * 4000);
+  };
+
+  playStrike();
+  return { src: null, nodes: [] };
+}
+
+function toggleSound(name) {
+  const btn = document.getElementById('btn-' + name);
+
+  if (state.activeSounds[name]) {
+    // Stop
+    try {
+      const s = state.activeSounds[name];
+      if (s.src) s.src.stop();
+    } catch(e) {}
+    delete state.activeSounds[name];
+    btn.classList.remove('active');
+  } else {
+    // Start
+    const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    const master = createMasterGain();
+
+    let sound;
+    if (name === 'rain') sound = playRain(master);
+    else if (name === 'forest') sound = playForest(master);
+    else if (name === 'bowl') sound = playBowl(master);
+    else if (name === 'white') sound = playWhiteNoise(master);
+
+    sound.master = master;
+    state.activeSounds[name] = sound;
+    btn.classList.add('active');
+  }
+}
+
+function setVolume(val) {
+  state.volume = val / 100;
+  document.getElementById('volLabel').textContent = val + '%';
+  Object.values(state.activeSounds).forEach(s => {
+    if (s.master) s.master.gain.value = state.volume;
+  });
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+updateTimerDisplay();
+updateStreakBadge();
+setBreathPattern('box');
+</script>
+</body>
+</html>
